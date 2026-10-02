@@ -26,12 +26,22 @@ public/           Panel (index.html) y plantilla.csv de ejemplo
 
 ### Plantilla del mensaje
 
-WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. La plantilla  (Utilidad, es_MX) se creó por API:
+WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. La plantilla `recordatorio_evento_v3` (Utilidad, es_MX) se creó por API:
 
 - **Encabezado:** Recordatorio de evento
 - **Cuerpo:**
 
-  \- **Botones de respuesta rápida:**  (índice 0) y  (índice 1).
+  ```
+  Hola {{1}}, este es un recordatorio de tu próximo evento.
+
+  Evento: {{2}}
+  Fecha: {{3}}
+  Horario: de {{4}} a {{5}}
+  Lugar: {{6}}
+
+  Por favor confírmanos si podrás asistir usando los botones de abajo.
+  ```
+- **Botones de respuesta rápida:** `Asistiré` (índice 0) y `No podré asistir` (índice 1).
 
 **Botón de calendario:** Meta rechaza (INVALID_FORMAT) las plantillas con un botón de link a Google Calendar. Por eso, cuando la persona toca *Asistiré*, el webhook le responde con un mensaje interactivo con el botón **Agregar a mi calendario**. Eso se permite porque la persona acaba de escribir.
 
