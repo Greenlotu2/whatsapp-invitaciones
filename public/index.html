@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Invitaciones WhatsApp</title>
+<title>Recordatorios WhatsApp</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
@@ -47,30 +47,31 @@
 </style>
 </head>
 <body>
-<header><h1>Invitaciones por WhatsApp</h1></header>
+<header><h1>Recordatorios de eventos por WhatsApp</h1></header>
 <main>
 
   <section class="card">
     <h2><span class="step">1</span>Datos del evento</h2>
     <div class="grid">
-      <label>Evento<input id="evento" placeholder="Junta anual 2026"></label>
-      <label>Fecha<input id="fecha" placeholder="viernes 16 de octubre"></label>
-      <label>Hora<input id="hora" placeholder="10:00 a.m."></label>
-      <label>Lugar<input id="lugar" placeholder="Sala de juntas, Piso 3"></label>
+      <label>Evento<input id="evento" placeholder="Ensayo general"></label>
+      <label>Fecha<input id="fecha" type="date"></label>
+      <label>Hora de inicio<input id="inicio" type="time"></label>
+      <label>Hora de fin<input id="fin" type="time"></label>
+      <label>Lugar<input id="lugar" placeholder="Auditorio principal"></label>
     </div>
-    <p class="hint">Se usan para todas las filas. Si el archivo trae columnas evento/fecha/hora/lugar, esas tienen prioridad.</p>
+    <p class="hint">Se usan para todos los invitados de la lista.</p>
   </section>
 
   <section class="card">
-    <h2><span class="step">2</span>Lista de invitados (CSV o Excel)</h2>
+    <h2><span class="step">2</span>Lista de invitados (Excel o CSV)</h2>
     <div class="row">
       <input type="file" id="archivo" accept=".csv,.xlsx,.xls">
       <a href="plantilla.csv" download>Descargar plantilla</a>
     </div>
-    <p class="hint">Columnas obligatorias: <b>nombre</b> y <b>telefono</b> (10 dígitos o con lada de país).</p>
+    <p class="hint">Columnas obligatorias: <b>nombre</b> y <b>celular</b> (10 dígitos o con lada de país).</p>
     <div id="preview"></div>
     <div class="row" style="margin-top:10px">
-      <button class="primary" id="btnEnviar" disabled>Enviar invitaciones</button>
+      <button class="primary" id="btnEnviar" disabled>Enviar recordatorios</button>
       <span id="msgEnvio" class="msg"></span>
     </div>
   </section>
@@ -85,7 +86,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Evento</th><th>Fecha</th><th>Estado</th><th>Respuesta</th><th>Detalle</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Evento</th><th>Fecha</th><th>Horario</th><th>Estado</th><th>Respuesta</th><th>Detalle</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
@@ -127,14 +128,25 @@ $('archivo').addEventListener('change', async (e) => {
 });
 
 $('btnEnviar').addEventListener('click', async () => {
-  const evento = Object.fromEntries(['evento', 'fecha', 'hora', 'lugar'].map((k) => [k, $(k).value.trim()]));
-  if (!confirm(`Se enviarán ${filas.length} invitaciones por WhatsApp. ¿Continuar?`)) return;
+  const evento = Object.fromEntries(['evento', 'fecha', 'inicio', 'fin', 'lugar'].map((k) => [k, $(k).value.trim()]));
+  const msg = $('msgEnvio');
+  if (Object.values(evento).some((v) => !v)) {
+    msg.className = 'msg err';
+    msg.textContent = 'Llena todos los datos del evento.';
+    return;
+  }
+  if (!confirm(`Se enviarán ${filas.length} recordatorios por WhatsApp. ¿Continuar?`)) return;
   $('btnEnviar').disabled = true;
   const res = await fetch('/api/enviar', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filas, evento }),
   }).then((r) => r.json());
-  const msg = $('msgEnvio');
+  if (res.error) {
+    msg.className = 'msg err';
+    msg.textContent = res.error;
+    $('btnEnviar').disabled = false;
+    return;
+  }
   msg.className = 'msg' + (res.rechazadas.length ? ' err' : '');
   msg.innerHTML = `${res.encoladas} en cola de envío.` +
     (res.rechazadas.length ? ` ${res.rechazadas.length} filas omitidas: ` +
@@ -159,30 +171,30 @@ async function cargar() {
   ];
   $('stats').innerHTML = stats.map(([t, n]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
   $('tbody').innerHTML = [...datos].reverse().map((i) => `<tr>
-    <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td><td>${esc(i.evento)}</td><td>${esc(i.fecha)}</td>
+    <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td><td>${esc(i.evento)}</td><td>${esc(i.fecha)}</td><td>${esc(i.inicio)} - ${esc(i.fin)}</td>
     <td><span class="badge b-${i.estado}">${esc(i.estado)}</span></td>
     <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
     <td class="err-text">${esc(i.error)}</td></tr>`).join('') ||
-    '<tr><td colspan="7" class="hint">Aún no hay invitaciones.</td></tr>';
+    '<tr><td colspan="8" class="hint">Aún no hay recordatorios.</td></tr>';
 }
 
 $('btnExportar').addEventListener('click', () => {
-  const cols = ['nombre', 'telefono', 'evento', 'fecha', 'hora', 'lugar', 'estado', 'respuesta', 'error', 'actualizado'];
+  const cols = ['nombre', 'telefono', 'evento', 'fecha', 'inicio', 'fin', 'lugar', 'estado', 'respuesta', 'error', 'actualizado'];
   const csv = [cols.join(','), ...datos.map((i) => cols.map((c) => `"${String(i[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
   const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'invitaciones.csv',
+    href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'recordatorios.csv',
   });
   a.click();
 });
 
 $('btnReintentar').addEventListener('click', async () => {
   const r = await fetch('/api/reintentar', { method: 'POST' }).then((r) => r.json());
-  alert(`${r.reintentadas} invitaciones reenviadas a la cola.`);
+  alert(`${r.reintentadas} recordatorios reenviados a la cola.`);
   cargar();
 });
 
 $('btnLimpiar').addEventListener('click', async () => {
-  if (!confirm('Se borrará todo el historial de invitaciones. ¿Continuar?')) return;
+  if (!confirm('Se borrará todo el historial de recordatorios. ¿Continuar?')) return;
   await fetch('/api/invitaciones', { method: 'DELETE' });
   cargar();
 });

@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import * as store from './store.js';
-import { enviarInvitacion, enviarTexto, normalizarTelefono } from './whatsapp.js';
+import { enviarCalendario, enviarRecordatorio, enviarTexto, normalizarTelefono } from './whatsapp.js';
 
 const {
   PORT = 3000,
@@ -64,8 +64,11 @@ app.post('/webhook', (req, res) => {
         if (!inv) continue;
         const respuesta = accion === 'CONFIRMAR' ? 'confirmado' : 'rechazado';
         store.actualizar(inv.id, { respuesta, estado: 'leido', error: null });
-        const texto = respuesta === 'confirmado' ? REPLY_CONFIRMADO : REPLY_RECHAZADO;
-        if (texto) enviarTexto(m.from, texto).catch((e) => console.error('Respuesta automática:', e.message));
+        // Al confirmar se manda el botón de calendario (Meta no lo permite dentro de la plantilla)
+        const envio = respuesta === 'confirmado'
+          ? enviarCalendario(m.from, inv, REPLY_CONFIRMADO || 'Gracias por confirmar.')
+          : REPLY_RECHAZADO && enviarTexto(m.from, REPLY_RECHAZADO);
+        envio?.catch((e) => console.error('Respuesta automática:', e.message));
       }
     }
   }
@@ -96,7 +99,7 @@ async function procesarCola() {
   while (cola.length) {
     const inv = cola.shift();
     try {
-      const wamid = await enviarInvitacion(inv);
+      const wamid = await enviarRecordatorio(inv);
       store.actualizar(inv.id, { estado: 'enviado', wamid, error: null });
     } catch (e) {
       store.actualizar(inv.id, { estado: 'fallido', error: e.message });
@@ -106,29 +109,33 @@ async function procesarCola() {
   enviando = false;
 }
 
-// Recibe las filas del CSV/Excel + datos del evento por defecto
+// Recibe las filas del CSV/Excel (nombre, teléfono) + los datos del evento, que son iguales para todos
 app.post('/api/enviar', (req, res) => {
-  const { filas = [], evento = {} } = req.body ?? {};
+  const { filas = [], evento: ev = {} } = req.body ?? {};
+  const evento = {
+    evento: String(ev.evento ?? '').trim(),
+    fecha: String(ev.fecha ?? ''),
+    inicio: String(ev.inicio ?? ''),
+    fin: String(ev.fin ?? ''),
+    lugar: String(ev.lugar ?? '').trim(),
+  };
+  if (!evento.evento || !evento.lugar) return res.status(400).json({ error: 'Falta el nombre o el lugar del evento.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(evento.fecha)) return res.status(400).json({ error: 'Fecha inválida.' });
+  if (!/^\d{2}:\d{2}$/.test(evento.inicio) || !/^\d{2}:\d{2}$/.test(evento.fin) || evento.fin <= evento.inicio) {
+    return res.status(400).json({ error: 'La hora de fin debe ser posterior a la de inicio.' });
+  }
+
   const creadas = [];
   const rechazadas = [];
-
   for (const [i, f] of filas.entries()) {
+    const nombre = String(f.nombre ?? '').trim();
     const telefono = normalizarTelefono(f.telefono);
-    const datos = {
-      nombre: String(f.nombre ?? '').trim(),
-      telefono,
-      evento: f.evento || evento.evento,
-      fecha: f.fecha || evento.fecha,
-      hora: f.hora || evento.hora,
-      lugar: f.lugar || evento.lugar,
-    };
-    const faltan = ['nombre', 'evento', 'fecha', 'hora', 'lugar'].filter((k) => !datos[k]);
-    if (!telefono) faltan.unshift('teléfono válido');
+    const faltan = [!nombre && 'nombre', !telefono && 'celular válido'].filter(Boolean);
     if (faltan.length) {
       rechazadas.push({ fila: i + 2, motivo: `Falta: ${faltan.join(', ')}` });
       continue;
     }
-    creadas.push(store.crear(datos));
+    creadas.push(store.crear({ nombre, telefono, ...evento }));
   }
 
   cola.push(...creadas);

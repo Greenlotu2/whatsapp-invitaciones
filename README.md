@@ -1,11 +1,11 @@
-# Invitaciones por WhatsApp (Meta Cloud API)
+# Recordatorios de eventos por WhatsApp (Meta Cloud API)
 
-Panel web para enviar invitaciones a eventos por WhatsApp de forma automática:
+Panel web para enviar recordatorios de eventos por WhatsApp de forma automática:
 
-1. Capturas los datos del evento (nombre, fecha, hora, lugar).
-2. Subes un CSV o Excel con `nombre` y `telefono`.
-3. El sistema envía una plantilla aprobada a cada persona, con botones **Confirmar** / **No podré asistir**.
-4. El webhook registra si el mensaje se entregó o se leyó y qué respondió cada persona, y le contesta de forma automática.
+1. Capturas los datos del evento (nombre, fecha, hora de inicio y fin, lugar).
+2. Subes un Excel o CSV con `nombre` y `celular` (también se aceptan "Nombre completo", "Teléfono" y "WhatsApp").
+3. El sistema envía una plantilla aprobada a cada persona, con botones **Asistiré** / **No podré asistir**.
+4. El webhook registra si el mensaje se entregó o se leyó y qué respondió cada persona, y a quien confirma le manda el botón para agregar el evento a su calendario.
 
 ```
 src/server.js     Servidor Express: panel, API, cola de envío y webhook
@@ -26,27 +26,14 @@ public/           Panel (index.html) y plantilla.csv de ejemplo
 
 ### Plantilla del mensaje
 
-WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. En el **Administrador de WhatsApp → Plantillas de mensajes → Crear plantilla**:
+WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. La plantilla  (Utilidad, es_MX) se creó por API:
 
-- **Categoría:** Marketing (o Utilidad si la invitación es para empleados o clientes que ya tienen una relación contigo)
-- **Nombre:** `invitacion_evento`
-- **Idioma:** Español (MEX) → `es_MX`
+- **Encabezado:** Recordatorio de evento
 - **Cuerpo:**
 
-  ```
-  Hola {{1}}, te invitamos a *{{2}}*.
+  \- **Botones de respuesta rápida:**  (índice 0) y  (índice 1).
 
-  Fecha: {{3}}
-  Hora: {{4}}
-  Lugar: {{5}}
-
-  ¿Nos confirmas tu asistencia?
-  ```
-
-  Ejemplos para la revisión: `Ana`, `Junta anual`, `viernes 16 de octubre`, `10:00 a.m.`, `Sala de juntas`.
-- **Botones → Respuesta rápida:** `Confirmar asistencia` (primero) y `No podré asistir` (segundo). El orden importa: el código usa el índice 0 para confirmar y el 1 para rechazar.
-
-La aprobación suele tardar desde minutos hasta 24 horas. Si cambias el nombre o el idioma, ajusta `TEMPLATE_NAME` y `TEMPLATE_LANG` en `.env`.
+**Botón de calendario:** Meta rechaza (INVALID_FORMAT) las plantillas con un botón de link a Google Calendar. Por eso, cuando la persona toca *Asistiré*, el webhook le responde con un mensaje interactivo con el botón **Agregar a mi calendario**. Eso se permite porque la persona acaba de escribir.
 
 ## 2. Instalar y correr
 
