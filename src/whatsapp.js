@@ -58,7 +58,7 @@ export function linkCalendario(inv) {
 
 // Envía la plantilla aprobada (TEMPLATE_NAME):
 // cuerpo {{1}} nombre, {{2}} fecha, {{3}} inicio, {{4}} fin (24 h), {{5}} lugar.
-// Botones de respuesta rápida: 0 = Asistiré, 1 = No podré asistir.
+// Botones de respuesta rápida: 0 = Confirmo asistencia, 1 = No podré asistir.
 // (Meta rechaza plantillas con link a Google Calendar; el link se manda al confirmar.)
 export function enviarRecordatorio(inv) {
   const texto = (t) => ({ type: 'text', text: String(t || '-') });
