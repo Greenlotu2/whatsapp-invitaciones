@@ -26,7 +26,7 @@ public/           Panel (index.html) y plantilla.csv de ejemplo
 
 ### Plantilla del mensaje
 
-WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. La plantilla `recordatorio_evento_v3` (Utilidad, es_MX) se creó por API:
+WhatsApp solo permite iniciar conversaciones con **plantillas aprobadas**. La plantilla `recordatorio_encuentro` (Utilidad, es_MX) se creó por API:
 
 - **Encabezado:** Recordatorio de evento
 - **Cuerpo:**

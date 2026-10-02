@@ -3,7 +3,7 @@ const {
   WHATSAPP_TOKEN,
   WHATSAPP_PHONE_NUMBER_ID,
   GRAPH_API_VERSION = 'v25.0',
-  TEMPLATE_NAME = 'recordatorio_evento_v3',
+  TEMPLATE_NAME = 'recordatorio_encuentro',
   TEMPLATE_LANG = 'es_MX',
   DEFAULT_COUNTRY_CODE = '52',
   EVENT_TIMEZONE = 'America/Mexico_City',
@@ -43,12 +43,6 @@ export function fechaLarga(iso) {
   return new Date(a, m - 1, d).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// "14:30" -> "2:30 p.m."
-export function horaCorta(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'a.m.' : 'p.m.'}`;
-}
-
 // Link de Google Calendar con el evento ya lleno
 export function linkCalendario(inv) {
   const f = inv.fecha.replaceAll('-', '');
@@ -63,8 +57,7 @@ export function linkCalendario(inv) {
 }
 
 // Envía la plantilla aprobada (TEMPLATE_NAME):
-// encabezado fijo; cuerpo {{1}} nombre, {{2}} evento, {{3}} fecha,
-// {{4}} inicio, {{5}} fin, {{6}} lugar.
+// cuerpo {{1}} nombre, {{2}} fecha, {{3}} inicio, {{4}} fin (24 h), {{5}} lugar.
 // Botones de respuesta rápida: 0 = Asistiré, 1 = No podré asistir.
 // (Meta rechaza plantillas con link a Google Calendar; el link se manda al confirmar.)
 export function enviarRecordatorio(inv) {
@@ -85,14 +78,7 @@ export function enviarRecordatorio(inv) {
       components: [
         {
           type: 'body',
-          parameters: [
-            inv.nombre,
-            inv.evento,
-            fechaLarga(inv.fecha),
-            horaCorta(inv.inicio),
-            horaCorta(inv.fin),
-            inv.lugar,
-          ].map(texto),
+          parameters: [inv.nombre, fechaLarga(inv.fecha), inv.inicio, inv.fin, inv.lugar].map(texto),
         },
         boton(0, `CONFIRMAR:${inv.id}`),
         boton(1, `RECHAZAR:${inv.id}`),
