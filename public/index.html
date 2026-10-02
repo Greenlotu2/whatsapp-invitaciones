@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invitaciones WhatsApp</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fa; --card: #fff; --text: #1a2233; --muted: #64708a; --border: #dde3ee;
+    --primary: #1d4ed8; --primary-h: #1e40af; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--primary); color: #fff; padding: 14px 24px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; }
+  .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; margin-right: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; color: var(--text); }
+  .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font: inherit; cursor: pointer; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button.primary:hover { background: var(--primary-h); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { background: #f8fafc; position: sticky; top: 0; font-weight: 600; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #eef2f7; }
+  .b-enviado, .b-entregado { background: #e0eaff; color: var(--primary); }
+  .b-leido { background: #dbeafe; color: var(--primary-h); }
+  .b-fallido, .b-rechazado { background: #fee2e2; color: var(--err); }
+  .b-confirmado { background: #dcfce7; color: var(--ok); }
+  .b-pendiente { background: #fef3c7; color: var(--warn); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .stat { border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+  .stat b { display: block; font-size: 20px; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .msg { font-size: 13px; margin-top: 8px; }
+  .msg.err { color: var(--err); }
+  .err-text { color: var(--err); font-size: 12px; }
+</style>
+</head>
+<body>
+<header><h1>Invitaciones por WhatsApp</h1></header>
+<main>
+
+  <section class="card">
+    <h2><span class="step">1</span>Datos del evento</h2>
+    <div class="grid">
+      <label>Evento<input id="evento" placeholder="Junta anual 2026"></label>
+      <label>Fecha<input id="fecha" placeholder="viernes 16 de octubre"></label>
+      <label>Hora<input id="hora" placeholder="10:00 a.m."></label>
+      <label>Lugar<input id="lugar" placeholder="Sala de juntas, Piso 3"></label>
+    </div>
+    <p class="hint">Se usan para todas las filas. Si el archivo trae columnas evento/fecha/hora/lugar, esas tienen prioridad.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>Lista de invitados (CSV o Excel)</h2>
+    <div class="row">
+      <input type="file" id="archivo" accept=".csv,.xlsx,.xls">
+      <a href="plantilla.csv" download>Descargar plantilla</a>
+    </div>
+    <p class="hint">Columnas obligatorias: <b>nombre</b> y <b>telefono</b> (10 dígitos o con lada de país).</p>
+    <div id="preview"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnEnviar" disabled>Enviar invitaciones</button>
+      <span id="msgEnvio" class="msg"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>Seguimiento</h2>
+    <div class="stats" id="stats"></div>
+    <div class="row">
+      <button id="btnExportar">Exportar CSV</button>
+      <button id="btnReintentar">Reintentar fallidas</button>
+      <button id="btnLimpiar">Borrar historial</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Evento</th><th>Fecha</th><th>Estado</th><th>Respuesta</th><th>Detalle</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let filas = [];
+
+// Normaliza encabezados: "Teléfono" -> "telefono", "Celular" -> "telefono"
+const ALIAS = { celular: 'telefono', whatsapp: 'telefono', tel: 'telefono', movil: 'telefono', nombre_completo: 'nombre' };
+function clave(h) {
+  const k = String(h).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '_');
+  return ALIAS[k] ?? k;
+}
+
+$('archivo').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const crudas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
+  filas = crudas
+    .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [clave(k), String(v).trim()])))
+    .filter((r) => r.nombre || r.telefono);
+
+  if (!filas.length || !('telefono' in filas[0])) {
+    $('preview').innerHTML = '<p class="msg err">No se encontró la columna "telefono".</p>';
+    $('btnEnviar').disabled = true;
+    return;
+  }
+  const cols = Object.keys(filas[0]);
+  $('preview').innerHTML = `<p class="hint">${filas.length} invitados encontrados.</p>
+    <div class="table-wrap"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+    <tbody>${filas.slice(0, 50).map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    ${filas.length > 50 ? '<p class="hint">Mostrando las primeras 50.</p>' : ''}`;
+  $('btnEnviar').disabled = false;
+});
+
+$('btnEnviar').addEventListener('click', async () => {
+  const evento = Object.fromEntries(['evento', 'fecha', 'hora', 'lugar'].map((k) => [k, $(k).value.trim()]));
+  if (!confirm(`Se enviarán ${filas.length} invitaciones por WhatsApp. ¿Continuar?`)) return;
+  $('btnEnviar').disabled = true;
+  const res = await fetch('/api/enviar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filas, evento }),
+  }).then((r) => r.json());
+  const msg = $('msgEnvio');
+  msg.className = 'msg' + (res.rechazadas.length ? ' err' : '');
+  msg.innerHTML = `${res.encoladas} en cola de envío.` +
+    (res.rechazadas.length ? ` ${res.rechazadas.length} filas omitidas: ` +
+      res.rechazadas.map((r) => `fila ${r.fila} (${esc(r.motivo)})`).join('; ') : '');
+  filas = [];
+  $('archivo').value = '';
+  $('preview').innerHTML = '';
+  cargar();
+});
+
+let datos = [];
+async function cargar() {
+  datos = await fetch('/api/invitaciones').then((r) => r.json());
+  const cuenta = (f) => datos.filter(f).length;
+  const stats = [
+    ['Total', datos.length],
+    ['Enviadas', cuenta((i) => ['enviado', 'entregado', 'leido'].includes(i.estado))],
+    ['Leídas', cuenta((i) => i.estado === 'leido')],
+    ['Confirmadas', cuenta((i) => i.respuesta === 'confirmado')],
+    ['No asistirán', cuenta((i) => i.respuesta === 'rechazado')],
+    ['Fallidas', cuenta((i) => i.estado === 'fallido')],
+  ];
+  $('stats').innerHTML = stats.map(([t, n]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
+  $('tbody').innerHTML = [...datos].reverse().map((i) => `<tr>
+    <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td><td>${esc(i.evento)}</td><td>${esc(i.fecha)}</td>
+    <td><span class="badge b-${i.estado}">${esc(i.estado)}</span></td>
+    <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
+    <td class="err-text">${esc(i.error)}</td></tr>`).join('') ||
+    '<tr><td colspan="7" class="hint">Aún no hay invitaciones.</td></tr>';
+}
+
+$('btnExportar').addEventListener('click', () => {
+  const cols = ['nombre', 'telefono', 'evento', 'fecha', 'hora', 'lugar', 'estado', 'respuesta', 'error', 'actualizado'];
+  const csv = [cols.join(','), ...datos.map((i) => cols.map((c) => `"${String(i[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'invitaciones.csv',
+  });
+  a.click();
+});
+
+$('btnReintentar').addEventListener('click', async () => {
+  const r = await fetch('/api/reintentar', { method: 'POST' }).then((r) => r.json());
+  alert(`${r.reintentadas} invitaciones reenviadas a la cola.`);
+  cargar();
+});
+
+$('btnLimpiar').addEventListener('click', async () => {
+  if (!confirm('Se borrará todo el historial de invitaciones. ¿Continuar?')) return;
+  await fetch('/api/invitaciones', { method: 'DELETE' });
+  cargar();
+});
+
+cargar();
+setInterval(cargar, 4000);
+</script>
+</body>
+</html>
