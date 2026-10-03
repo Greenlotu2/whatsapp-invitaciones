@@ -160,6 +160,11 @@ $('btnEnviar').addEventListener('click', async () => {
   cargar();
 });
 
+// En computadora se usa WhatsApp Web: el link wa.me abre la app de escritorio, que pierde los emojis.
+// target="whatsapp" reutiliza la misma pestaña en cada envío.
+const ES_MOVIL = /Android|iPhone|iPad/i.test(navigator.userAgent);
+const linkWa = (i) => ES_MOVIL ? i.wa : i.wa.replace(/^https:\/\/wa\.me\/(\d+)\?text=/,'https://web.whatsapp.com/send?phone=$1&text=');
+
 let datos = [];
 let ultimo = '';
 async function cargar() {
@@ -182,7 +187,7 @@ async function cargar() {
     <td><span class="badge b-${i.estado}">${esc(i.estado)}</span></td>
     <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
     <td><div class="row">
-      <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(i.wa)}" target="_blank" rel="noopener" data-id="${i.id}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
+      <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(linkWa(i))}" target="whatsapp" data-id="${i.id}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
       <button data-id="${i.id}" data-resp="confirmado">Confirmó</button>
       <button data-id="${i.id}" data-resp="rechazado">No asistirá</button>
       ${i.respuesta ? `<button data-id="${i.id}" data-resp="">Quitar respuesta</button>` : ''}
