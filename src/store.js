@@ -52,3 +52,15 @@ export function eliminarTodas() {
   invitaciones = [];
   guardar();
 }
+
+// Mensaje editable del envío manual (data/mensaje.json); null = usar el predeterminado
+const MENSAJE_FILE = path.join(DATA_DIR, 'mensaje.json');
+let mensaje = fs.existsSync(MENSAJE_FILE) ? JSON.parse(fs.readFileSync(MENSAJE_FILE, 'utf8')).texto : null;
+
+export const leerMensaje = () => mensaje;
+
+export function guardarMensaje(texto) {
+  mensaje = texto;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(MENSAJE_FILE, JSON.stringify({ texto }, null, 2));
+}

@@ -11,6 +11,8 @@ Mientras la API de Meta no esté disponible, el panel funciona en modo manual, s
 3. En cada invitado das **Enviar por WhatsApp**: se abre el chat con el mensaje formal ya escrito (incluye el link de Maps y el de Google Calendar) y tú das **Enviar**. El panel lo marca como enviado.
 4. Cuando la persona contesta, marcas **Confirmó** o **No asistirá**.
 
+El texto del mensaje se edita en el paso **2. Mensaje** del panel, con vista previa. Variables disponibles: `{nombre}`, `{evento}`, `{fecha}`, `{inicio}`, `{fin}`, `{lugar}`, `{maps}` y `{calendario}`. Se guarda en `data/mensaje.json`; si no existe, se usa el mensaje original.
+
 Los clics de envío deben ser humanos: automatizar WhatsApp Web va contra sus reglas y puede bloquear el número.
 
 ## Envío automático por la API (cuando Meta lo habilite)

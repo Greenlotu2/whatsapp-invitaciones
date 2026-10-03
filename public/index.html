@@ -14,13 +14,13 @@
   body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
   header { background: var(--primary); color: #fff; padding: 14px 24px; }
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
   .card h2 { margin: 0 0 12px; font-size: 15px; }
   .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; margin-right: 6px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; }
   label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
-  input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; color: var(--text); }
+  input { min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; color: var(--text); }
   .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
   button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font: inherit; cursor: pointer; }
   button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -47,6 +47,11 @@
   a.wa { display: inline-block; padding: 5px 10px; border-radius: 6px; background: #15803d; color: #fff; text-decoration: none; font-size: 12px; }
   a.wa.done { background: #fff; color: var(--ok); border: 1px solid var(--ok); }
   td .row button { padding: 4px 8px; font-size: 12px; }
+  .msg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+  textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--text); resize: vertical; width: 100%; }
+  .vista { white-space: pre-wrap; word-break: break-word; background: #e7f6e7; border: 1px solid #cfe9cf; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text); min-height: 100%; max-height: 420px; overflow-y: auto; }
+  .chip { padding: 3px 8px; font-size: 12px; border-radius: 12px; font-family: ui-monospace, Consolas, monospace; }
+  .msg.ok { color: var(--ok); }
 </style>
 </head>
 <body>
@@ -67,7 +72,27 @@
   </section>
 
   <section class="card">
-    <h2><span class="step">2</span>Lista de invitados (Excel o CSV)</h2>
+    <h2><span class="step">2</span>Mensaje</h2>
+    <div class="msg-grid">
+      <label>Texto del mensaje
+        <textarea id="mensaje" rows="18" spellcheck="true"></textarea>
+      </label>
+      <label>Vista previa (con los datos del paso 1)
+        <div id="vistaPrevia" class="vista"></div>
+      </label>
+    </div>
+    <p class="hint">Toca una variable para insertarla donde está el cursor. Se reemplaza por el dato de cada invitado:</p>
+    <div class="row" id="variables" style="margin-top:6px"></div>
+    <p class="hint">Si el evento no tiene link de Maps, la línea con <code>{maps}</code> no se envía.</p>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnGuardarMensaje">Guardar mensaje</button>
+      <button id="btnRestaurarMensaje">Restaurar original</button>
+      <span id="msgMensaje" class="msg"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>Lista de invitados (Excel o CSV)</h2>
     <div class="row">
       <input type="file" id="archivo" accept=".csv,.xlsx,.xls">
       <a href="plantilla.csv" download>Descargar plantilla</a>
@@ -81,7 +106,7 @@
   </section>
 
   <section class="card">
-    <h2><span class="step">3</span>Enviar y dar seguimiento</h2>
+    <h2><span class="step">4</span>Enviar y dar seguimiento</h2>
     <p class="hint" style="margin:0 0 12px">Toca <b>Enviar por WhatsApp</b>: se abre el chat con el mensaje ya escrito y solo das <b>Enviar</b>. Cuando contesten, marca su respuesta aquí.</p>
     <div class="stats" id="stats"></div>
     <div class="row">
@@ -221,6 +246,74 @@ $('btnLimpiar').addEventListener('click', async () => {
   cargar();
 });
 
+/* ---------- Mensaje editable ---------- */
+let guardado = '';
+let predeterminado = '';
+let variables = [];
+const json = (url, metodo, cuerpo) => fetch(url, {
+  method: metodo, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+}).then((r) => r.json());
+
+function avisoMensaje(texto, clase = '') {
+  $('msgMensaje').className = 'msg ' + clase;
+  $('msgMensaje').textContent = texto;
+}
+
+let temporizador;
+function actualizarVistaPrevia() {
+  clearTimeout(temporizador);
+  temporizador = setTimeout(async () => {
+    const evento = Object.fromEntries(['evento', 'fecha', 'inicio', 'fin', 'lugar', 'maps'].map((k) => [k, $(k).value.trim()]));
+    const r = await json('/api/mensaje/vista-previa', 'POST', { texto: $('mensaje').value, evento });
+    $('vistaPrevia').textContent = r.texto;
+  }, 250);
+  const malas = [...$('mensaje').value.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((v) => !variables.includes(v));
+  if (malas.length) avisoMensaje(`Variable no reconocida: {${malas[0]}}. Revisa cómo está escrita.`, 'err');
+  else if ($('mensaje').value.trim() !== guardado) avisoMensaje('Cambios sin guardar.', 'err');
+  else avisoMensaje('');
+}
+
+async function cargarMensaje() {
+  const r = await fetch('/api/mensaje').then((r) => r.json());
+  guardado = r.texto;
+  predeterminado = r.predeterminado;
+  variables = r.variables;
+  $('mensaje').value = r.texto;
+  $('variables').innerHTML = r.variables.map((v) => `<button class="chip" data-var="${v}">{${v}}</button>`).join('');
+  actualizarVistaPrevia();
+}
+
+$('variables').addEventListener('click', (e) => {
+  const v = e.target.closest('[data-var]')?.dataset.var;
+  if (!v) return;
+  const t = $('mensaje');
+  t.setRangeText(`{${v}}`, t.selectionStart, t.selectionEnd, 'end');
+  t.focus();
+  actualizarVistaPrevia();
+});
+$('mensaje').addEventListener('input', actualizarVistaPrevia);
+['evento', 'fecha', 'inicio', 'fin', 'lugar', 'maps'].forEach((k) => $(k).addEventListener('input', actualizarVistaPrevia));
+
+$('btnGuardarMensaje').addEventListener('click', async () => {
+  const r = await json('/api/mensaje', 'PUT', { texto: $('mensaje').value });
+  if (r.error) return avisoMensaje(r.error, 'err');
+  guardado = $('mensaje').value.trim();
+  avisoMensaje('Mensaje guardado. Se usará en los envíos que hagas a partir de ahora.', 'ok');
+  ultimo = ''; // fuerza a regenerar los links de WhatsApp con el mensaje nuevo
+  cargar();
+});
+
+$('btnRestaurarMensaje').addEventListener('click', () => {
+  if (!confirm('Se reemplazará el texto por el mensaje original. ¿Continuar?')) return;
+  $('mensaje').value = predeterminado;
+  actualizarVistaPrevia();
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if ($('mensaje').value.trim() !== guardado) e.preventDefault();
+});
+
+cargarMensaje();
 cargar();
 setInterval(cargar, 4000);
 </script>

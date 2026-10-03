@@ -1,7 +1,9 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import * as store from './store.js';
-import { enviarCalendario, enviarRecordatorio, enviarTexto, linkWhatsApp, normalizarTelefono } from './whatsapp.js';
+import {
+  MENSAJE_PREDETERMINADO, VARIABLES, enviarCalendario, enviarRecordatorio, enviarTexto, linkWhatsApp, mensajeManual, normalizarTelefono,
+} from './whatsapp.js';
 
 const {
   PORT = 3000,
@@ -88,7 +90,40 @@ app.use((req, res, next) => {
 
 app.use(express.static('public'));
 
-app.get('/api/invitaciones', (_req, res) => res.json(store.listar().map((i) => ({ ...i, wa: linkWhatsApp(i) }))));
+const mensajeActual = () => store.leerMensaje() ?? MENSAJE_PREDETERMINADO;
+
+app.get('/api/invitaciones', (_req, res) => {
+  const plantilla = mensajeActual();
+  res.json(store.listar().map((i) => ({ ...i, wa: linkWhatsApp(i, plantilla) })));
+});
+
+// Mensaje editable del envío manual
+app.get('/api/mensaje', (_req, res) => {
+  res.json({ texto: mensajeActual(), predeterminado: MENSAJE_PREDETERMINADO, variables: VARIABLES });
+});
+
+app.put('/api/mensaje', (req, res) => {
+  const texto = String(req.body?.texto ?? '').replace(/\r\n/g, '\n').trim();
+  if (!texto) return res.status(400).json({ error: 'El mensaje no puede quedar vacío.' });
+  if (texto.length > 3000) return res.status(400).json({ error: 'El mensaje es demasiado largo (máximo 3000 caracteres).' });
+  store.guardarMensaje(texto === MENSAJE_PREDETERMINADO ? null : texto);
+  res.json({ ok: true });
+});
+
+// Vista previa con los datos del evento capturados en el panel
+app.post('/api/mensaje/vista-previa', (req, res) => {
+  const { texto, evento = {} } = req.body ?? {};
+  const inv = {
+    nombre: 'Ana López',
+    evento: evento.evento || 'Nombre del evento',
+    fecha: /^\d{4}-\d{2}-\d{2}$/.test(evento.fecha ?? '') ? evento.fecha : '2026-10-09',
+    inicio: evento.inicio || '17:00',
+    fin: evento.fin || '19:00',
+    lugar: evento.lugar || 'Lugar del evento',
+    maps: evento.maps || '',
+  };
+  res.json({ texto: mensajeManual(inv, String(texto ?? '')) });
+});
 
 // Envío manual: el panel marca "enviado" al abrir WhatsApp y registra la respuesta a mano
 app.patch('/api/invitaciones/:id', (req, res) => {

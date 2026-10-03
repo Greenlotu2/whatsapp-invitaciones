@@ -56,33 +56,54 @@ export function linkCalendario(inv) {
   }).toString();
 }
 
-// Texto del recordatorio para envío manual (sin plantilla de Meta, admite links)
-export function mensajeManual(inv) {
-  return [
-    `✨ Estimado(a) ${inv.nombre}:`,
-    '',
-    'El Consejo Empresarial de Tlaxcala tiene el gusto de recordarle nuestro próximo encuentro empresarial. 🤝✨',
-    '',
-    `📅 Fecha: ${fechaLarga(inv.fecha)}`,
-    `🕔 Horario: ${inv.inicio} a ${inv.fin} horas`,
-    `📍 Lugar: ${inv.lugar}`,
-    ...(inv.maps ? [`🗺️ Ubicación: ${inv.maps}`] : []),
-    '',
-    'Será un verdadero placer contar con su distinguida presencia en este importante encuentro, donde tendremos la oportunidad de compartir, conectar y fortalecer nuestros vínculos empresariales. 🤝💼',
-    '',
-    '✅ Le agradeceremos confirmar su asistencia respondiendo a este mensaje.',
-    '',
-    `📆 Agregue el evento a su calendario: ${linkCalendario(inv)}`,
-    '',
-    '🌟 ¡Esperamos contar con su presencia!',
-    '',
-    'Atentamente,',
-    'Consejo Empresarial de Tlaxcala',
-  ].join('\n');
+// Texto del recordatorio para envío manual (sin plantilla de Meta, admite links).
+// Se edita desde el panel; las {variables} se reemplazan por los datos de cada invitado.
+export const MENSAJE_PREDETERMINADO = [
+  '✨ Estimado(a) {nombre}:',
+  '',
+  'El Consejo Empresarial de Tlaxcala tiene el gusto de recordarle nuestro próximo encuentro empresarial. 🤝✨',
+  '',
+  '📅 Fecha: {fecha}',
+  '🕔 Horario: {inicio} a {fin} horas',
+  '📍 Lugar: {lugar}',
+  '🗺️ Ubicación: {maps}',
+  '',
+  'Será un verdadero placer contar con su distinguida presencia en este importante encuentro, donde tendremos la oportunidad de compartir, conectar y fortalecer nuestros vínculos empresariales. 🤝💼',
+  '',
+  '✅ Le agradeceremos confirmar su asistencia respondiendo a este mensaje.',
+  '',
+  '📆 Agregue el evento a su calendario: {calendario}',
+  '',
+  '🌟 ¡Esperamos contar con su presencia!',
+  '',
+  'Atentamente,',
+  'Consejo Empresarial de Tlaxcala',
+].join('\n');
+
+export const VARIABLES = ['nombre', 'evento', 'fecha', 'inicio', 'fin', 'lugar', 'maps', 'calendario'];
+
+export function mensajeManual(inv, plantilla = MENSAJE_PREDETERMINADO) {
+  const valores = {
+    nombre: inv.nombre,
+    evento: inv.evento,
+    fecha: fechaLarga(inv.fecha),
+    inicio: inv.inicio,
+    fin: inv.fin,
+    lugar: inv.lugar,
+    maps: inv.maps,
+    calendario: linkCalendario(inv),
+  };
+  return plantilla
+    .split('\n')
+    // Una línea con {maps} se omite si el evento no tiene link de Maps
+    .filter((linea) => inv.maps || !linea.includes('{maps}'))
+    .join('\n')
+    .replace(/\{(\w+)\}/g, (m, k) => (k in valores ? valores[k] ?? '' : m));
 }
 
 // Link que abre WhatsApp con el chat y el mensaje ya escritos; la persona solo da "Enviar"
-export const linkWhatsApp = (inv) => `https://wa.me/${inv.telefono}?text=${encodeURIComponent(mensajeManual(inv))}`;
+export const linkWhatsApp = (inv, plantilla) =>
+  `https://wa.me/${inv.telefono}?text=${encodeURIComponent(mensajeManual(inv, plantilla))}`;
 
 // Envía la plantilla aprobada (TEMPLATE_NAME):
 // cuerpo {{1}} nombre, {{2}} fecha, {{3}} inicio, {{4}} fin (24 h), {{5}} lugar.
