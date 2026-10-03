@@ -50,14 +50,13 @@
   .msg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
   textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--text); resize: vertical; width: 100%; }
   .vista { white-space: pre-wrap; word-break: break-word; background: #e7f6e7; border: 1px solid #cfe9cf; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text); min-height: 100%; max-height: 420px; overflow-y: auto; }
-  .vars { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 10px; margin-top: 10px; }
-  .var { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 2px solid #c7d6fb; border-radius: 10px; background: #f3f7ff; }
+  .barra-vars { position: sticky; top: 0; z-index: 1; background: var(--card); padding: 8px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .barra-vars .hint { margin: 0 0 6px; }
+  .vars { display: flex; flex-wrap: wrap; gap: 6px; }
+  .var { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid #c7d6fb; border-radius: 14px; background: #f3f7ff; font-size: 12px; }
   .var:hover { border-color: var(--primary); background: #e8efff; }
-  .var .icono { font-size: 22px; line-height: 1; }
-  .var .codigo { font: 600 17px ui-monospace, Consolas, monospace; color: var(--primary); }
-  .var .desc { font-size: 13px; color: var(--text); }
-  .var .ej { font-size: 12px; color: var(--muted); }
-  .vars-titulo { margin: 14px 0 0; font-size: 15px; font-weight: 600; }
+  .var .codigo { font: 600 13px ui-monospace, Consolas, monospace; color: var(--primary); }
+  .var .desc { color: var(--muted); }
   .msg.ok { color: var(--ok); }
 </style>
 </head>
@@ -80,6 +79,10 @@
 
   <section class="card">
     <h2><span class="step">2</span>Mensaje</h2>
+    <div class="barra-vars">
+      <p class="hint">Pon el cursor en el texto y toca una variable para agregarla. Al enviar se cambia por el dato de cada invitado.</p>
+      <div class="vars" id="variables"></div>
+    </div>
     <div class="msg-grid">
       <label>Texto del mensaje
         <textarea id="mensaje" rows="18" spellcheck="true"></textarea>
@@ -88,9 +91,6 @@
         <div id="vistaPrevia" class="vista"></div>
       </label>
     </div>
-    <p class="vars-titulo">Variables: toca una para agregarla al texto</p>
-    <p class="hint" style="margin-top:2px">Pon el cursor en el texto donde la quieras y toca el botón. Al enviar, cada variable se cambia por el dato de cada invitado.</p>
-    <div class="vars" id="variables"></div>
     <p class="hint">Si el evento no tiene link de Maps, la línea con <code>{maps}</code> no se envía.</p>
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnGuardarMensaje">Guardar mensaje</button>
@@ -267,7 +267,7 @@ const SIMBOLOGIA = {
   fin: ['🕖', 'Hora de fin', 'Ej.: 19:00'],
   lugar: ['📍', 'Lugar del evento', 'Ej.: Casa de la Cultura'],
   maps: ['🗺️', 'Link de Google Maps', 'Si no hay link, esa línea no se envía'],
-  calendario: ['📆', 'Link para agregar al calendario', 'Abre Google Calendar con el evento lleno'],
+  calendario: ['📆', 'Link al calendario', 'Abre Google Calendar con el evento lleno'],
 };
 const json = (url, metodo, cuerpo) => fetch(url, {
   method: metodo, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
@@ -300,9 +300,8 @@ async function cargarMensaje() {
   $('mensaje').value = r.texto;
   $('variables').innerHTML = r.variables.map((v) => {
     const [icono, desc, ej] = SIMBOLOGIA[v] ?? ['🔹', v, ''];
-    return `<button class="var" data-var="${v}" title="Agregar {${v}} al texto">
-      <span class="icono">${icono}</span><span class="codigo">{${v}}</span>
-      <span class="desc">${desc}</span><span class="ej">${ej}</span></button>`;
+    return `<button class="var" data-var="${v}" title="${desc}. ${ej}">
+      <span>${icono}</span><span class="codigo">{${v}}</span><span class="desc">${desc}</span></button>`;
   }).join('');
   actualizarVistaPrevia();
 }
