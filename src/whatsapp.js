@@ -56,6 +56,34 @@ export function linkCalendario(inv) {
   }).toString();
 }
 
+// Texto del recordatorio para envío manual (sin plantilla de Meta, admite links)
+export function mensajeManual(inv) {
+  return [
+    `✨ Estimado(a) ${inv.nombre}:`,
+    '',
+    'El Consejo Empresarial de Tlaxcala tiene el gusto de recordarle nuestro próximo encuentro empresarial. 🤝✨',
+    '',
+    `📅 Fecha: ${fechaLarga(inv.fecha)}`,
+    `🕔 Horario: ${inv.inicio} a ${inv.fin} horas`,
+    `📍 Lugar: ${inv.lugar}`,
+    ...(inv.maps ? [`🗺️ Ubicación: ${inv.maps}`] : []),
+    '',
+    'Será un verdadero placer contar con su distinguida presencia en este importante encuentro, donde tendremos la oportunidad de compartir, conectar y fortalecer nuestros vínculos empresariales. 🤝💼',
+    '',
+    '✅ Le agradeceremos confirmar su asistencia respondiendo a este mensaje.',
+    '',
+    `📆 Agregue el evento a su calendario: ${linkCalendario(inv)}`,
+    '',
+    '🌟 ¡Esperamos contar con su presencia!',
+    '',
+    'Atentamente,',
+    'Consejo Empresarial de Tlaxcala',
+  ].join('\n');
+}
+
+// Link que abre WhatsApp con el chat y el mensaje ya escritos; la persona solo da "Enviar"
+export const linkWhatsApp = (inv) => `https://wa.me/${inv.telefono}?text=${encodeURIComponent(mensajeManual(inv))}`;
+
 // Envía la plantilla aprobada (TEMPLATE_NAME):
 // cuerpo {{1}} nombre, {{2}} fecha, {{3}} inicio, {{4}} fin (24 h), {{5}} lugar.
 // Botones de respuesta rápida: 0 = Confirmo asistencia, 1 = No podré asistir.

@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import * as store from './store.js';
-import { enviarCalendario, enviarRecordatorio, enviarTexto, normalizarTelefono } from './whatsapp.js';
+import { enviarCalendario, enviarRecordatorio, enviarTexto, linkWhatsApp, normalizarTelefono } from './whatsapp.js';
 
 const {
   PORT = 3000,
@@ -88,7 +88,18 @@ app.use((req, res, next) => {
 
 app.use(express.static('public'));
 
-app.get('/api/invitaciones', (_req, res) => res.json(store.listar()));
+app.get('/api/invitaciones', (_req, res) => res.json(store.listar().map((i) => ({ ...i, wa: linkWhatsApp(i) }))));
+
+// Envío manual: el panel marca "enviado" al abrir WhatsApp y registra la respuesta a mano
+app.patch('/api/invitaciones/:id', (req, res) => {
+  const { estado, respuesta } = req.body ?? {};
+  const cambios = {};
+  if (['pendiente', 'enviado'].includes(estado)) cambios.estado = estado;
+  if ([null, 'confirmado', 'rechazado'].includes(respuesta)) cambios.respuesta = respuesta;
+  if (respuesta && store.porId(req.params.id)?.estado === 'pendiente') cambios.estado = 'enviado'; // si respondió, ya se le envió
+  const inv = store.actualizar(req.params.id, cambios);
+  inv ? res.json(inv) : res.sendStatus(404);
+});
 
 // Cola de envío: uno por uno con una pausa para no saturar la API
 const cola = [];
@@ -109,21 +120,24 @@ async function procesarCola() {
   enviando = false;
 }
 
-// Recibe las filas del CSV/Excel (nombre, teléfono) + los datos del evento, que son iguales para todos
-app.post('/api/enviar', (req, res) => {
-  const { filas = [], evento: ev = {} } = req.body ?? {};
+// Valida las filas del CSV/Excel (nombre, teléfono) + los datos del evento, que son iguales para todos,
+// y crea las invitaciones. Devuelve { error } o { creadas, rechazadas }.
+function crearInvitaciones(body) {
+  const { filas = [], evento: ev = {} } = body ?? {};
   const evento = {
     evento: String(ev.evento ?? '').trim(),
     fecha: String(ev.fecha ?? ''),
     inicio: String(ev.inicio ?? ''),
     fin: String(ev.fin ?? ''),
     lugar: String(ev.lugar ?? '').trim(),
+    maps: String(ev.maps ?? '').trim(),
   };
-  if (!evento.evento || !evento.lugar) return res.status(400).json({ error: 'Falta el nombre o el lugar del evento.' });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(evento.fecha)) return res.status(400).json({ error: 'Fecha inválida.' });
+  if (!evento.evento || !evento.lugar) return { error: 'Falta el nombre o el lugar del evento.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(evento.fecha)) return { error: 'Fecha inválida.' };
   if (!/^\d{2}:\d{2}$/.test(evento.inicio) || !/^\d{2}:\d{2}$/.test(evento.fin) || evento.fin <= evento.inicio) {
-    return res.status(400).json({ error: 'La hora de fin debe ser posterior a la de inicio.' });
+    return { error: 'La hora de fin debe ser posterior a la de inicio.' };
   }
+  if (evento.maps && !/^https:\/\/\S+$/.test(evento.maps)) return { error: 'El link de Google Maps debe empezar con https://' };
 
   const creadas = [];
   const rechazadas = [];
@@ -137,10 +151,23 @@ app.post('/api/enviar', (req, res) => {
     }
     creadas.push(store.crear({ nombre, telefono, ...evento }));
   }
+  return { creadas, rechazadas };
+}
 
-  cola.push(...creadas);
+// Envío automático por la API (plantilla aprobada)
+app.post('/api/enviar', (req, res) => {
+  const r = crearInvitaciones(req.body);
+  if (r.error) return res.status(400).json(r);
+  cola.push(...r.creadas);
   procesarCola();
-  res.json({ encoladas: creadas.length, rechazadas });
+  res.json({ encoladas: r.creadas.length, rechazadas: r.rechazadas });
+});
+
+// Envío manual: solo crea la lista; cada mensaje se manda desde el panel con su link de WhatsApp
+app.post('/api/cargar', (req, res) => {
+  const r = crearInvitaciones(req.body);
+  if (r.error) return res.status(400).json(r);
+  res.json({ cargadas: r.creadas.length, rechazadas: r.rechazadas });
 });
 
 app.post('/api/reintentar', (_req, res) => {

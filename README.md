@@ -1,6 +1,21 @@
 # Recordatorios de eventos por WhatsApp (Meta Cloud API)
 
-Panel web para enviar recordatorios de eventos por WhatsApp de forma automática:
+Panel web para enviar recordatorios de eventos por WhatsApp.
+
+## Envío manual (modo actual)
+
+Mientras la API de Meta no esté disponible, el panel funciona en modo manual, sin plantillas ni aprobación de Meta:
+
+1. Capturas los datos del evento y, opcionalmente, el link de Google Maps del lugar.
+2. Subes el Excel o CSV y das **Cargar lista**.
+3. En cada invitado das **Enviar por WhatsApp**: se abre el chat con el mensaje formal ya escrito (incluye el link de Maps y el de Google Calendar) y tú das **Enviar**. El panel lo marca como enviado.
+4. Cuando la persona contesta, marcas **Confirmó** o **No asistirá**.
+
+Los clics de envío deben ser humanos: automatizar WhatsApp Web va contra sus reglas y puede bloquear el número.
+
+## Envío automático por la API (cuando Meta lo habilite)
+
+El endpoint  sigue disponible:
 
 1. Capturas los datos del evento (nombre, fecha, hora de inicio y fin, lugar).
 2. Subes un Excel o CSV con `nombre` y `celular` (también se aceptan "Nombre completo", "Teléfono" y "WhatsApp").

@@ -44,6 +44,9 @@
   .msg { font-size: 13px; margin-top: 8px; }
   .msg.err { color: var(--err); }
   .err-text { color: var(--err); font-size: 12px; }
+  a.wa { display: inline-block; padding: 5px 10px; border-radius: 6px; background: #15803d; color: #fff; text-decoration: none; font-size: 12px; }
+  a.wa.done { background: #fff; color: var(--ok); border: 1px solid var(--ok); }
+  td .row button { padding: 4px 8px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -58,8 +61,9 @@
       <label>Hora de inicio<input id="inicio" type="time"></label>
       <label>Hora de fin<input id="fin" type="time"></label>
       <label>Lugar<input id="lugar" placeholder="Auditorio principal"></label>
+      <label>Link de Google Maps (opcional)<input id="maps" placeholder="https://maps.app.goo.gl/..."></label>
     </div>
-    <p class="hint">Se usan para todos los invitados de la lista.</p>
+    <p class="hint">Se usan para todos los invitados de la lista. El nombre del evento es el título que aparece en el calendario. Para el link de Maps: abre el lugar en Google Maps, toca <b>Compartir</b> y <b>Copiar vínculo</b>.</p>
   </section>
 
   <section class="card">
@@ -71,22 +75,22 @@
     <p class="hint">Columnas obligatorias: <b>nombre</b> y <b>celular</b> (10 dígitos o con lada de país).</p>
     <div id="preview"></div>
     <div class="row" style="margin-top:10px">
-      <button class="primary" id="btnEnviar" disabled>Enviar recordatorios</button>
+      <button class="primary" id="btnEnviar" disabled>Cargar lista</button>
       <span id="msgEnvio" class="msg"></span>
     </div>
   </section>
 
   <section class="card">
-    <h2><span class="step">3</span>Seguimiento</h2>
+    <h2><span class="step">3</span>Enviar y dar seguimiento</h2>
+    <p class="hint" style="margin:0 0 12px">Toca <b>Enviar por WhatsApp</b>: se abre el chat con el mensaje ya escrito y solo das <b>Enviar</b>. Cuando contesten, marca su respuesta aquí.</p>
     <div class="stats" id="stats"></div>
     <div class="row">
       <button id="btnExportar">Exportar CSV</button>
-      <button id="btnReintentar">Reintentar fallidas</button>
       <button id="btnLimpiar">Borrar historial</button>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Evento</th><th>Fecha</th><th>Horario</th><th>Estado</th><th>Respuesta</th><th>Detalle</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Estado</th><th>Respuesta</th><th>Acciones</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
@@ -128,16 +132,15 @@ $('archivo').addEventListener('change', async (e) => {
 });
 
 $('btnEnviar').addEventListener('click', async () => {
-  const evento = Object.fromEntries(['evento', 'fecha', 'inicio', 'fin', 'lugar'].map((k) => [k, $(k).value.trim()]));
+  const evento = Object.fromEntries(['evento', 'fecha', 'inicio', 'fin', 'lugar', 'maps'].map((k) => [k, $(k).value.trim()]));
   const msg = $('msgEnvio');
-  if (Object.values(evento).some((v) => !v)) {
+  if (Object.entries(evento).some(([k, v]) => k !== 'maps' && !v)) {
     msg.className = 'msg err';
     msg.textContent = 'Llena todos los datos del evento.';
     return;
   }
-  if (!confirm(`Se enviarán ${filas.length} recordatorios por WhatsApp. ¿Continuar?`)) return;
-  $('btnEnviar').disabled = true;
-  const res = await fetch('/api/enviar', {
+    $('btnEnviar').disabled = true;
+  const res = await fetch('/api/cargar', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filas, evento }),
   }).then((r) => r.json());
@@ -148,7 +151,7 @@ $('btnEnviar').addEventListener('click', async () => {
     return;
   }
   msg.className = 'msg' + (res.rechazadas.length ? ' err' : '');
-  msg.innerHTML = `${res.encoladas} en cola de envío.` +
+  msg.innerHTML = `${res.cargadas} invitados cargados. Ahora envíalos en el paso 3.` +
     (res.rechazadas.length ? ` ${res.rechazadas.length} filas omitidas: ` +
       res.rechazadas.map((r) => `fila ${r.fila} (${esc(r.motivo)})`).join('; ') : '');
   filas = [];
@@ -158,28 +161,37 @@ $('btnEnviar').addEventListener('click', async () => {
 });
 
 let datos = [];
+let ultimo = '';
 async function cargar() {
-  datos = await fetch('/api/invitaciones').then((r) => r.json());
+  const texto = await fetch('/api/invitaciones').then((r) => r.text());
+  if (texto === ultimo) return; // sin cambios: no redibujar (evita perder clics)
+  ultimo = texto;
+  datos = JSON.parse(texto);
   const cuenta = (f) => datos.filter(f).length;
   const stats = [
     ['Total', datos.length],
-    ['Enviadas', cuenta((i) => ['enviado', 'entregado', 'leido'].includes(i.estado))],
-    ['Leídas', cuenta((i) => i.estado === 'leido')],
-    ['Confirmadas', cuenta((i) => i.respuesta === 'confirmado')],
+    ['Por enviar', cuenta((i) => i.estado === 'pendiente')],
+    ['Enviados', cuenta((i) => i.estado !== 'pendiente')],
+    ['Confirmados', cuenta((i) => i.respuesta === 'confirmado')],
     ['No asistirán', cuenta((i) => i.respuesta === 'rechazado')],
-    ['Fallidas', cuenta((i) => i.estado === 'fallido')],
+    ['Sin respuesta', cuenta((i) => i.estado !== 'pendiente' && !i.respuesta)],
   ];
   $('stats').innerHTML = stats.map(([t, n]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
-  $('tbody').innerHTML = [...datos].reverse().map((i) => `<tr>
-    <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td><td>${esc(i.evento)}</td><td>${esc(i.fecha)}</td><td>${esc(i.inicio)} - ${esc(i.fin)}</td>
+  $('tbody').innerHTML = datos.map((i) => `<tr>
+    <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td>
     <td><span class="badge b-${i.estado}">${esc(i.estado)}</span></td>
     <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
-    <td class="err-text">${esc(i.error)}</td></tr>`).join('') ||
-    '<tr><td colspan="8" class="hint">Aún no hay recordatorios.</td></tr>';
+    <td><div class="row">
+      <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(i.wa)}" target="_blank" rel="noopener" data-id="${i.id}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
+      <button data-id="${i.id}" data-resp="confirmado">Confirmó</button>
+      <button data-id="${i.id}" data-resp="rechazado">No asistirá</button>
+      ${i.respuesta ? `<button data-id="${i.id}" data-resp="">Quitar respuesta</button>` : ''}
+    </div></td></tr>`).join('') ||
+    '<tr><td colspan="5" class="hint">Aún no hay invitados cargados.</td></tr>';
 }
 
 $('btnExportar').addEventListener('click', () => {
-  const cols = ['nombre', 'telefono', 'evento', 'fecha', 'inicio', 'fin', 'lugar', 'estado', 'respuesta', 'error', 'actualizado'];
+  const cols = ['nombre', 'telefono', 'evento', 'fecha', 'inicio', 'fin', 'lugar', 'estado', 'respuesta', 'actualizado'];
   const csv = [cols.join(','), ...datos.map((i) => cols.map((c) => `"${String(i[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'recordatorios.csv',
@@ -187,14 +199,19 @@ $('btnExportar').addEventListener('click', () => {
   a.click();
 });
 
-$('btnReintentar').addEventListener('click', async () => {
-  const r = await fetch('/api/reintentar', { method: 'POST' }).then((r) => r.json());
-  alert(`${r.reintentadas} recordatorios reenviados a la cola.`);
-  cargar();
+const marcar = (id, cambios) => fetch('/api/invitaciones/' + id, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cambios),
+}).then(cargar);
+
+$('tbody').addEventListener('click', (e) => {
+  const a = e.target.closest('a.wa');
+  if (a) return void marcar(a.dataset.id, { estado: 'enviado' }); // el link se abre solo (target=_blank)
+  const b = e.target.closest('button[data-resp]');
+  if (b) marcar(b.dataset.id, { respuesta: b.dataset.resp || null });
 });
 
 $('btnLimpiar').addEventListener('click', async () => {
-  if (!confirm('Se borrará todo el historial de recordatorios. ¿Continuar?')) return;
+  if (!confirm('Se borrará toda la lista de invitados y sus respuestas. ¿Continuar?')) return;
   await fetch('/api/invitaciones', { method: 'DELETE' });
   cargar();
 });
