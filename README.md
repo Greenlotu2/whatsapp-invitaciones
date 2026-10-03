@@ -15,7 +15,7 @@ Los clics de envío deben ser humanos: automatizar WhatsApp Web va contra sus re
 
 ## Envío automático por la API (cuando Meta lo habilite)
 
-El endpoint  sigue disponible:
+El endpoint `POST /api/enviar` sigue disponible:
 
 1. Capturas los datos del evento (nombre, fecha, hora de inicio y fin, lugar).
 2. Subes un Excel o CSV con `nombre` y `celular` (también se aceptan "Nombre completo", "Teléfono" y "WhatsApp").
