@@ -27,8 +27,10 @@ El endpoint `POST /api/enviar` sigue disponible:
 ```
 src/server.js     Servidor Express: panel, API, cola de envío y webhook
 src/whatsapp.js   Llamadas a la Graph API (plantilla y texto)
-src/store.js      Guarda las invitaciones en data/invitaciones.json
-public/           Panel (index.html) y plantilla.csv de ejemplo
+src/store.js      Guarda invitaciones y mensaje en Supabase
+views/panel.html  Panel (servido detrás de la contraseña)
+public/           plantilla.csv de ejemplo
+supabase/         schema.sql con las tablas
 ```
 
 ## 1. Configuración en Meta (una sola vez)
@@ -72,6 +74,14 @@ npm run dev
 ```
 
 Abre <http://localhost:3000>. Si definiste `ADMIN_PASSWORD`, el usuario es `admin`.
+
+Los datos (invitados y mensaje) se guardan en Supabase: crea un proyecto, corre  en su SQL Editor y pon  y  en .
+
+### Publicar en Vercel
+
+1. Sube el repositorio a GitHub e impórtalo en Vercel (se detecta como Express, sin configuración).
+2. En Vercel → Settings → Environment Variables agrega ,  y  (y las de WhatsApp si usarás la API).
+3. Sin  el panel publicado no abre. El panel está en , fuera de , para que quede detrás de la contraseña.
 
 ## 3. Webhook (estados y respuestas)
 

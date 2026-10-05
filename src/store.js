@@ -1,66 +1,57 @@
-// Almacenamiento simple en un archivo JSON (data/invitaciones.json).
-// Suficiente para cientos/miles de invitaciones; si crece, migrar a una base de datos.
-import fs from 'node:fs';
-import path from 'node:path';
+// Almacenamiento en Supabase (tablas en supabase/schema.sql) usando su API REST.
+// Usa la llave service_role: este archivo solo corre en el servidor.
 import crypto from 'node:crypto';
 
-const DATA_DIR = path.resolve('data');
-const FILE = path.join(DATA_DIR, 'invitaciones.json');
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
 
-let invitaciones = [];
-if (fs.existsSync(FILE)) {
-  invitaciones = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+async function rest(ruta, { method = 'GET', body, prefer } = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error('Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${ruta}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(prefer && { Prefer: prefer }),
+    },
+    body: body && JSON.stringify(body),
+  });
+  const texto = await res.text(); // un insert sin "return=representation" responde 201 sin cuerpo
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${texto}`);
+  return texto ? JSON.parse(texto) : null;
 }
 
-function guardar() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(invitaciones, null, 2));
-  fs.renameSync(tmp, FILE);
+const q = encodeURIComponent;
+
+export function crearVarias(lista) {
+  if (!lista.length) return [];
+  const filas = lista.map((datos) => ({ id: crypto.randomUUID().slice(0, 8), ...datos }));
+  return rest('invitaciones', { method: 'POST', body: filas, prefer: 'return=representation' });
 }
 
-export function crear(datos) {
-  const ahora = new Date().toISOString();
-  const inv = {
-    id: crypto.randomUUID().slice(0, 8),
-    ...datos,
-    estado: 'pendiente', // pendiente | enviado | entregado | leido | fallido
-    respuesta: null, // null | confirmado | rechazado
-    wamid: null,
-    error: null,
-    creado: ahora,
-    actualizado: ahora,
-  };
-  invitaciones.push(inv);
-  guardar();
-  return inv;
+export async function actualizar(id, cambios) {
+  const [inv] = await rest(`invitaciones?id=eq.${q(id)}`, {
+    method: 'PATCH',
+    body: { ...cambios, actualizado: new Date().toISOString() },
+    prefer: 'return=representation',
+  });
+  return inv ?? null;
 }
 
-export function actualizar(id, cambios) {
-  const inv = invitaciones.find((i) => i.id === id);
-  if (!inv) return null;
-  Object.assign(inv, cambios, { actualizado: new Date().toISOString() });
-  guardar();
-  return inv;
+export const listar = () => rest('invitaciones?order=creado.asc,id.asc');
+export const porId = async (id) => (id ? (await rest(`invitaciones?id=eq.${q(id)}`))[0] : undefined);
+export const porWamid = async (wamid) => (wamid ? (await rest(`invitaciones?wamid=eq.${q(wamid)}`))[0] : undefined);
+export const eliminarTodas = () => rest('invitaciones?id=not.is.null', { method: 'DELETE' });
+
+// Mensaje editable del envío manual; null = usar el predeterminado
+export async function leerMensaje() {
+  const [fila] = await rest('configuracion?clave=eq.mensaje');
+  return fila?.valor ?? null;
 }
 
-export const listar = () => invitaciones;
-export const porId = (id) => invitaciones.find((i) => i.id === id);
-export const porWamid = (wamid) => invitaciones.find((i) => i.wamid === wamid);
-
-export function eliminarTodas() {
-  invitaciones = [];
-  guardar();
-}
-
-// Mensaje editable del envío manual (data/mensaje.json); null = usar el predeterminado
-const MENSAJE_FILE = path.join(DATA_DIR, 'mensaje.json');
-let mensaje = fs.existsSync(MENSAJE_FILE) ? JSON.parse(fs.readFileSync(MENSAJE_FILE, 'utf8')).texto : null;
-
-export const leerMensaje = () => mensaje;
-
-export function guardarMensaje(texto) {
-  mensaje = texto;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(MENSAJE_FILE, JSON.stringify({ texto }, null, 2));
-}
+export const guardarMensaje = (texto) =>
+  rest('configuracion', {
+    method: 'POST',
+    body: { clave: 'mensaje', valor: texto },
+    prefer: 'resolution=merge-duplicates',
+  });
