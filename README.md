@@ -75,13 +75,13 @@ npm run dev
 
 Abre <http://localhost:3000>. Si definiste `ADMIN_PASSWORD`, el usuario es `admin`.
 
-Los datos (invitados y mensaje) se guardan en Supabase: crea un proyecto, corre  en su SQL Editor y pon  y  en .
+Los datos (invitados y mensaje) se guardan en Supabase: crea un proyecto, corre `supabase/schema.sql` en su SQL Editor y pon `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en `.env`.
 
 ### Publicar en Vercel
 
 1. Sube el repositorio a GitHub e impórtalo en Vercel (se detecta como Express, sin configuración).
-2. En Vercel → Settings → Environment Variables agrega ,  y  (y las de WhatsApp si usarás la API).
-3. Sin  el panel publicado no abre. El panel está en , fuera de , para que quede detrás de la contraseña.
+2. En Vercel → Settings → Environment Variables agrega `ADMIN_PASSWORD`, `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` (y las de WhatsApp si usarás la API).
+3. Sin `ADMIN_PASSWORD` el panel publicado no abre. El panel está en `views/panel.html`, fuera de `public/`, para que quede detrás de la contraseña.
 
 ## 3. Webhook (estados y respuestas)
 
