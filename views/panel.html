@@ -58,6 +58,16 @@
   .var .codigo { font: 600 13px ui-monospace, Consolas, monospace; color: var(--primary); }
   .var .desc { color: var(--muted); }
   .msg.ok { color: var(--ok); }
+  .spec { border: 1px solid #c7d6fb; background: #f6f9ff; border-radius: 8px; padding: 12px 14px; }
+  .spec-titulo { margin: 0 0 8px; font-weight: 600; }
+  .spec-tabla { background: #fff; border: 1px solid var(--border); }
+  .spec-tabla td, .spec-tabla th { white-space: normal; }
+  .spec-reglas { margin: 10px 0; padding-left: 18px; font-size: 13px; }
+  .spec-reglas li { margin: 2px 0; }
+  tr.mala td { background: #fef2f2; }
+  .resumen { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; font-size: 13px; }
+  .resumen b.ok { color: var(--ok); }
+  .resumen b.err { color: var(--err); }
 </style>
 </head>
 <body>
@@ -101,11 +111,26 @@
 
   <section class="card">
     <h2><span class="step">3</span>Lista de invitados (Excel o CSV)</h2>
-    <div class="row">
-      <input type="file" id="archivo" accept=".csv,.xlsx,.xls">
-      <a href="plantilla.csv" download>Descargar plantilla</a>
+    <div class="spec">
+      <p class="spec-titulo">Formato requerido del Excel</p>
+      <table class="spec-tabla">
+        <thead><tr><th>Columna (fila 1)</th><th>Obligatoria</th><th>Formato</th><th>Ejemplo</th></tr></thead>
+        <tbody>
+          <tr><td><b>Nombre</b></td><td>Sí</td><td>Nombre como aparecerá en el mensaje, con acentos</td><td>Josué García López</td></tr>
+          <tr><td><b>Celular</b></td><td>Sí</td><td>10 dígitos (o con lada +52). Espacios y guiones se ignoran</td><td>222 123 4567</td></tr>
+        </tbody>
+      </table>
+      <ul class="spec-reglas">
+        <li>Los encabezados van en la <b>fila 1</b>; un invitado por fila desde la fila 2.</li>
+        <li>También se aceptan como encabezado: <i>Nombre completo</i> y <i>Teléfono, Tel, Móvil, WhatsApp</i>.</li>
+        <li>Solo se lee la <b>primera hoja</b>. Otras columnas (empresa, cargo…) se ignoran.</li>
+        <li>Formato <b>.xlsx</b> o <b>.csv</b>. En Excel, pon la columna Celular como <b>Texto</b> para que no se pierdan dígitos.</li>
+      </ul>
+      <button id="btnPlantilla">Descargar plantilla de Excel</button>
     </div>
-    <p class="hint">Columnas obligatorias: <b>nombre</b> y <b>celular</b> (10 dígitos o con lada de país).</p>
+    <div class="row" style="margin-top:12px">
+      <input type="file" id="archivo" accept=".csv,.xlsx,.xls">
+    </div>
     <div id="preview"></div>
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnEnviar" disabled>Cargar lista</button>
@@ -145,23 +170,70 @@ function clave(h) {
 $('archivo').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  const crudas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
+  const error = (html) => {
+    filas = [];
+    $('preview').innerHTML = `<p class="msg err">${html}</p>`;
+    $('btnEnviar').disabled = true;
+  };
+  let hoja;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    hoja = wb.Sheets[wb.SheetNames[0]];
+  } catch {
+    return error('No se pudo leer el archivo. Usa un Excel (.xlsx) o CSV.');
+  }
+  const encabezados = (XLSX.utils.sheet_to_json(hoja, { header: 1 })[0] ?? []).map((h) => String(h ?? ''));
+  const claves = encabezados.map(clave);
+  const faltan = [!claves.includes('nombre') && '<b>Nombre</b>', !claves.includes('telefono') && '<b>Celular</b>'].filter(Boolean);
+  if (faltan.length) {
+    return error(`${faltan.length > 1 ? 'Faltan las columnas' : 'Falta la columna'} ${faltan.join(' y ')} en la fila 1. Columnas encontradas: ${
+      encabezados.filter(Boolean).map((h) => `"${esc(h)}"`).join(', ') || 'ninguna'}. Revisa el formato requerido arriba.`);
+  }
+
+  const crudas = XLSX.utils.sheet_to_json(hoja, { raw: false, defval: '' });
+  const vistos = new Set();
   filas = crudas
     .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [clave(k), String(v).trim()])))
-    .filter((r) => r.nombre || r.telefono);
+    .map((r, i) => ({ nombre: r.nombre ?? '', telefono: r.telefono ?? '', fila: i + 2 }))
+    .filter((r) => r.nombre || r.telefono)
+    .map((r) => {
+      const tel = telefonoValido(r.telefono);
+      const problema = !r.nombre ? 'Falta nombre' : !r.telefono ? 'Falta celular'
+        : !tel ? 'Celular inválido' : vistos.has(tel) ? 'Celular repetido' : '';
+      if (tel) vistos.add(tel);
+      return { ...r, problema };
+    });
+  if (!filas.length) return error('El archivo no tiene invitados (las filas están vacías).');
 
-  if (!filas.length || !('telefono' in filas[0])) {
-    $('preview').innerHTML = '<p class="msg err">No se encontró la columna "telefono".</p>';
-    $('btnEnviar').disabled = true;
-    return;
-  }
-  const cols = Object.keys(filas[0]);
-  $('preview').innerHTML = `<p class="hint">${filas.length} invitados encontrados.</p>
-    <div class="table-wrap"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
-    <tbody>${filas.slice(0, 50).map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
-    ${filas.length > 50 ? '<p class="hint">Mostrando las primeras 50.</p>' : ''}`;
-  $('btnEnviar').disabled = false;
+  const buenas = filas.filter((r) => !r.problema);
+  const malas = filas.length - buenas.length;
+  $('preview').innerHTML = `<div class="resumen">
+      <span><b class="ok">${buenas.length}</b> listos para cargar</span>
+      ${malas ? `<span><b class="err">${malas}</b> con problemas (en rojo; no se cargarán)</span>` : ''}
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Fila</th><th>Nombre</th><th>Celular</th><th>Revisión</th></tr></thead>
+    <tbody>${[...filas].sort((a, b) => !!b.problema - !!a.problema).map((r) => `<tr class="${r.problema ? 'mala' : ''}">
+      <td>${r.fila}</td><td>${esc(r.nombre)}</td><td>${esc(r.telefono)}</td>
+      <td>${r.problema ? `<span class="err-text">${r.problema}</span>` : '✓'}</td></tr>`).join('')}</tbody></table></div>`;
+  filas = buenas;
+  $('btnEnviar').disabled = !buenas.length;
+});
+
+// Misma regla que el servidor: 10 dígitos (se antepone 52) o número con lada de país
+function telefonoValido(t) {
+  let d = String(t).replace(/\D/g, '');
+  if (d.length === 10) d = '52' + d;
+  if (d.length === 13 && d.startsWith('521')) d = '52' + d.slice(3);
+  return d.length >= 11 && d.length <= 15 ? d : null;
+}
+
+$('btnPlantilla').addEventListener('click', () => {
+  const ws = XLSX.utils.aoa_to_sheet([['Nombre', 'Celular'], ['Josué García López', '2221234567'], ['Ana López Hernández', '2227654321']]);
+  ws['!cols'] = [{ wch: 34 }, { wch: 16 }];
+  for (const c of ['B2', 'B3']) ws[c].z = '@'; // celular como texto
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Invitados');
+  XLSX.writeFile(wb, 'plantilla_invitados.xlsx');
 });
 
 $('btnEnviar').addEventListener('click', async () => {
@@ -184,7 +256,7 @@ $('btnEnviar').addEventListener('click', async () => {
     return;
   }
   msg.className = 'msg' + (res.rechazadas.length ? ' err' : '');
-  msg.innerHTML = `${res.cargadas} invitados cargados. Ahora envíalos en el paso 3.` +
+  msg.innerHTML = `${res.cargadas} invitados cargados. Ahora envíalos en el paso 4.` +
     (res.rechazadas.length ? ` ${res.rechazadas.length} filas omitidas: ` +
       res.rechazadas.map((r) => `fila ${r.fila} (${esc(r.motivo)})`).join('; ') : '');
   filas = [];
