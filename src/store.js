@@ -10,7 +10,8 @@ async function rest(ruta, { method = 'GET', body, prefer } = {}) {
     method,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      // Las llaves nuevas (sb_secret_...) van solo en apikey; las antiguas (JWT) también en Authorization
+      ...(SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ') && { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }),
       'Content-Type': 'application/json',
       ...(prefer && { Prefer: prefer }),
     },
