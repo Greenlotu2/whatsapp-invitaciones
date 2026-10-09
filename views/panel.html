@@ -37,6 +37,7 @@
   .b-fallido, .b-rechazado { background: #fee2e2; color: var(--err); }
   .b-confirmado { background: #dcfce7; color: var(--ok); }
   .b-pendiente { background: #fef3c7; color: var(--warn); }
+  .b-no_encontrado { background: #e5e7eb; color: #374151; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
   .stat { border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
   .stat b { display: block; font-size: 20px; }
@@ -271,6 +272,7 @@ const ES_MOVIL = /Android|iPhone|iPad/i.test(navigator.userAgent);
 const linkWa = (i) => ES_MOVIL ? i.wa : i.wa.replace(/^https:\/\/wa\.me\/(\d+)\?text=/,'https://web.whatsapp.com/send?phone=$1&text=');
 
 let datos = [];
+const ETIQUETA_ESTADO = { no_encontrado: 'número no encontrado' };
 let ultimo = '';
 async function cargar() {
   const texto = await fetch('/api/invitaciones').then((r) => r.text());
@@ -281,20 +283,24 @@ async function cargar() {
   const stats = [
     ['Total', datos.length],
     ['Por enviar', cuenta((i) => i.estado === 'pendiente')],
-    ['Enviados', cuenta((i) => i.estado !== 'pendiente')],
+    ['Enviados', cuenta((i) => !['pendiente', 'no_encontrado'].includes(i.estado))],
     ['Confirmados', cuenta((i) => i.respuesta === 'confirmado')],
     ['No asistirán', cuenta((i) => i.respuesta === 'rechazado')],
-    ['Sin respuesta', cuenta((i) => i.estado !== 'pendiente' && !i.respuesta)],
+    ['Sin respuesta', cuenta((i) => !['pendiente', 'no_encontrado'].includes(i.estado) && !i.respuesta)],
+    ['Número no encontrado', cuenta((i) => i.estado === 'no_encontrado')],
   ];
   $('stats').innerHTML = stats.map(([t, n]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
   $('tbody').innerHTML = datos.map((i) => `<tr>
     <td>${esc(i.nombre)}</td><td>${esc(i.telefono)}</td>
-    <td><span class="badge b-${i.estado}">${esc(i.estado)}</span></td>
+    <td><span class="badge b-${i.estado}">${esc(ETIQUETA_ESTADO[i.estado] ?? i.estado)}</span></td>
     <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
     <td><div class="row">
       <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(linkWa(i))}" target="whatsapp" data-id="${i.id}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
       <button data-id="${i.id}" data-resp="confirmado">Confirmó</button>
       <button data-id="${i.id}" data-resp="rechazado">No asistirá</button>
+      ${i.estado === 'no_encontrado'
+        ? `<button data-id="${i.id}" data-estado="pendiente">Quitar marca</button>`
+        : `<button data-id="${i.id}" data-estado="no_encontrado" title="WhatsApp dice que el número no tiene cuenta">No se encontró el número</button>`}
       ${i.respuesta ? `<button data-id="${i.id}" data-resp="">Quitar respuesta</button>` : ''}
     </div></td></tr>`).join('') ||
     '<tr><td colspan="5" class="hint">Aún no hay invitados cargados.</td></tr>';
@@ -317,7 +323,9 @@ $('tbody').addEventListener('click', (e) => {
   const a = e.target.closest('a.wa');
   if (a) return void marcar(a.dataset.id, { estado: 'enviado' }); // el link se abre solo (target=_blank)
   const b = e.target.closest('button[data-resp]');
-  if (b) marcar(b.dataset.id, { respuesta: b.dataset.resp || null });
+  if (b) return void marcar(b.dataset.id, { respuesta: b.dataset.resp || null });
+  const s = e.target.closest('button[data-estado]');
+  if (s) marcar(s.dataset.id, { estado: s.dataset.estado });
 });
 
 $('btnLimpiar').addEventListener('click', async () => {

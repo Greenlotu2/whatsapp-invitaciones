@@ -137,7 +137,7 @@ app.post('/api/mensaje/vista-previa', (req, res) => {
 app.patch('/api/invitaciones/:id', async (req, res) => {
   const { estado, respuesta } = req.body ?? {};
   const cambios = {};
-  if (['pendiente', 'enviado'].includes(estado)) cambios.estado = estado;
+  if (['pendiente', 'enviado', 'no_encontrado'].includes(estado)) cambios.estado = estado;
   if ([null, 'confirmado', 'rechazado'].includes(respuesta)) cambios.respuesta = respuesta;
   if (respuesta && (await store.porId(req.params.id))?.estado === 'pendiente') cambios.estado = 'enviado'; // si respondió, ya se le envió
   const inv = await store.actualizar(req.params.id, cambios);
