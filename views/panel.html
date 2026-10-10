@@ -47,6 +47,9 @@
   .err-text { color: var(--err); font-size: 12px; }
   a.wa { display: inline-block; padding: 5px 10px; border-radius: 6px; background: #15803d; color: #fff; text-decoration: none; font-size: 12px; }
   a.wa.done { background: #fff; color: var(--ok); border: 1px solid var(--ok); }
+  a.wa.espera { background: #e5e7eb; color: #4b5563; border: 1px solid #d1d5db; cursor: not-allowed; }
+  .pausa { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; }
+  select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; color: var(--text); background: #fff; }
   td .row button { padding: 4px 8px; font-size: 12px; }
   .msg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
   textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--text); resize: vertical; width: 100%; }
@@ -142,6 +145,17 @@
   <section class="card">
     <h2><span class="step">4</span>Enviar y dar seguimiento</h2>
     <p class="hint" style="margin:0 0 12px">Toca <b>Enviar por WhatsApp</b>: se abre el chat con el mensaje ya escrito y solo das <b>Enviar</b>. Cuando contesten, marca su respuesta aquí.</p>
+    <div class="pausa">
+      <label>Pausa entre envíos
+        <select id="pausa">
+          <option value="30">30 segundos</option>
+          <option value="60" selected>1 minuto (recomendado)</option>
+          <option value="90">1 minuto 30 segundos</option>
+          <option value="120">2 minutos</option>
+        </select>
+      </label>
+      <span id="estadoPausa" class="hint" style="margin:0"></span>
+    </div>
     <div class="stats" id="stats"></div>
     <div class="row">
       <button id="btnExportar">Exportar CSV</button>
@@ -295,7 +309,7 @@ async function cargar() {
     <td><span class="badge b-${i.estado}">${esc(ETIQUETA_ESTADO[i.estado] ?? i.estado)}</span></td>
     <td>${i.respuesta ? `<span class="badge b-${i.respuesta}">${esc(i.respuesta)}</span>` : '<span class="hint">—</span>'}</td>
     <td><div class="row">
-      <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(linkWa(i))}" target="whatsapp" data-id="${i.id}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
+      <a class="wa${i.estado === 'pendiente' ? '' : ' done'}" href="${esc(linkWa(i))}" target="whatsapp" data-id="${i.id}" data-texto="${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}">${i.estado === 'pendiente' ? 'Enviar por WhatsApp' : 'Abrir de nuevo'}</a>
       <button data-id="${i.id}" data-resp="confirmado">Confirmó</button>
       <button data-id="${i.id}" data-resp="rechazado">No asistirá</button>
       ${i.estado === 'no_encontrado'
@@ -304,6 +318,7 @@ async function cargar() {
       ${i.respuesta ? `<button data-id="${i.id}" data-resp="">Quitar respuesta</button>` : ''}
     </div></td></tr>`).join('') ||
     '<tr><td colspan="5" class="hint">Aún no hay invitados cargados.</td></tr>';
+  actualizarPausa(); // al redibujar, los botones vuelven a mostrar la cuenta regresiva
 }
 
 $('btnExportar').addEventListener('click', () => {
@@ -319,9 +334,35 @@ const marcar = (id, cambios) => fetch('/api/invitaciones/' + id, {
   method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cambios),
 }).then(cargar);
 
+/* ---------- Pausa entre envíos (para que WhatsApp no bloquee el número) ---------- */
+// Se guarda en el navegador para que la pausa siga aunque recargues la página.
+const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let siguienteEnvio = Number(leer('siguienteEnvio')) || 0;
+if (leer('pausa')) $('pausa').value = leer('pausa');
+$('pausa').addEventListener('change', () => guardar('pausa', $('pausa').value));
+
+function actualizarPausa() {
+  const falta = Math.ceil((siguienteEnvio - Date.now()) / 1000);
+  const texto = falta > 0 ? `Espera ${Math.floor(falta / 60)}:${String(falta % 60).padStart(2, '0')}` : null;
+  document.querySelectorAll('a.wa').forEach((a) => {
+    a.classList.toggle('espera', !!texto);
+    a.textContent = texto ?? a.dataset.texto;
+  });
+  $('estadoPausa').textContent = texto ? `Siguiente envío disponible en ${texto.slice(7)}.` : 'Listo para enviar.';
+}
+setInterval(actualizarPausa, 1000);
+
 $('tbody').addEventListener('click', (e) => {
   const a = e.target.closest('a.wa');
-  if (a) return void marcar(a.dataset.id, { estado: 'enviado' }); // el link se abre solo (target=_blank)
+  if (a) {
+    if (Date.now() < siguienteEnvio) return void e.preventDefault(); // todavía en pausa
+    // Pausa elegida + 0 a 15 s al azar: un ritmo fijo se ve automatizado
+    siguienteEnvio = Date.now() + (Number($('pausa').value) + Math.random() * 15) * 1000;
+    guardar('siguienteEnvio', String(siguienteEnvio));
+    setTimeout(actualizarPausa, 0);
+    return void marcar(a.dataset.id, { estado: 'enviado' }); // el link se abre solo (target="whatsapp")
+  }
   const b = e.target.closest('button[data-resp]');
   if (b) return void marcar(b.dataset.id, { respuesta: b.dataset.resp || null });
   const s = e.target.closest('button[data-estado]');
